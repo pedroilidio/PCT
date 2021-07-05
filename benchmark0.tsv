@@ -1,0 +1,7 @@
+module	name	time_fit	time_pred	accuracy	desc
+PBCT	PBCT	0.23473358154296875	1.7611775398254395	0.99988	self.tree is nested dicts, itertools.product over np broadcast, JIT compiled _find_best_split
+PBCTnd	PBCT	2.542431116104126	2.5791373252868652	1.0	
+PBCTv3	PBCT	6.4974305629730225	3.9285101890563965	1.0	Nested dict tree, recursive tree building
+PBCTv3	PBCT2	6.673325300216675	4.022618770599365	1.0	self.tree is list of dicts, iteration over recursion.
+PBCTv3	PBCT3	6.526950120925903	3.940467119216919	1.0	self.tree nested dicts, iteration over recursion.
+PBCTv3	PBCT4	6.523683786392212	1.7043592929840088	1.0	self.tree is nested dicts, itertools.product over np broadcast
