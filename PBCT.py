@@ -357,11 +357,11 @@ class PBCT:
         X_shapes1 = tuple(X.shape[1] for X in XX)
 
         if Y.shape != X_shapes0:
-            raise ValueError('The lengths {X_shapes0} of each X in XX mus'
-                             't match Y.shape = {Y.shape}.')
+            raise ValueError(f'The lengths {X_shapes0} of each X in XX mus'
+                             f't match Y.shape = {Y.shape}.')
 
         if X_names is None:
-            X_names = [['[{i}]' for i in range(len(X))] for X in XX]
+            X_names = [[f'[{i}]' for i in range(len(X))] for X in XX]
         else:
             X_names_shape = tuple(len(names) for names in X_names)
 
@@ -369,9 +369,9 @@ class PBCT:
                 raise ValueError('X_names must be a list-like of list-like'
                                  's of string labels.')
             if X_names_shape != X_shapes1:
-                raise ValueError('The number of columns {X_shapes1} of ea'
-                                 'ch X in XX must match number of names gi'
-                                 'ven for each X {X_names_shape}.')
+                raise ValueError(f'The number of columns {X_shapes1} of ea'
+                                  'ch X in XX must match number of names gi'
+                                 f'ven for each X {X_names_shape}.')
 
         return XX, Y, X_names
 
@@ -486,6 +486,8 @@ class PBCT:
 
 
 class PBCTClassifier(PBCT):
+    """Equals to PBCT, except for assuming binary interaction matrix."""
+
     def _find_best_split(self, X, Y_means, Yvar):
         return _find_best_split_binY(X, Y_means, Yvar,
                                      self.min_samples_leaf)
