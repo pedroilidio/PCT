@@ -26,6 +26,13 @@ DEFAULTS = dict(
 )
 
 
+def load_model(path):
+    model_data = joblib.load(path)
+    model = PBCT(**model_data['parameters'])
+    model.tree = model_data['tree']
+    return model
+
+
 def ax_means(Y):
     dims = tuple(range(Y.ndim))
     all_but_i = (dims[:i] + dims[i+1:] for i in dims)
@@ -331,7 +338,7 @@ class PBCT:
         """Build decision tree as nested dicts."""
 
         tree = self._make_node(
-            XX, Y, pos=0, depth=0,
+            XX, Y, XXY=(XX, Y), pos=0, depth=0,
             ids = [np.arange(i) for i in Y.shape],
         )
 
@@ -350,11 +357,12 @@ class PBCT:
             # local_ids are based on the considered submatrix, while ids refers
             # to the whole initial Y.
 
-            XYi1, XYi2 = select_from_ids(
+            # FIXME: Gambiarra alert: XXY key is just used temporarily.
+            XYi1, XYi2 = select_from_local_ids(
                 *parent_node['XXY'],
-                ids,
+                parent_ids,
                 parent_node['local_ids'],
-                axis
+                axis,
             )
             XX1, Y1, ids1, XX2, Y2, ids2 = *XYi1, *XYi2
             del parent_node['XXY']
@@ -362,7 +370,7 @@ class PBCT:
             # TODO: Use a loop here?
             child1 = self._make_node(
                 XX1, Y1,
-                XXY=(XX1, Y1),  # FIXME: Gambiarra alert.
+                XXY=(XX1, Y1),  
                 depth=dep,
                 pos=pos,
                 ids=ids1,
@@ -372,7 +380,7 @@ class PBCT:
 
             child2 = self._make_node(
                 XX2, Y2,
-                XXY=(XX2, Y2),  # FIXME: Gambiarra alert.
+                XXY=(XX2, Y2),
                 depth=dep,
                 pos=pos+1,
                 ids=ids2,
@@ -380,6 +388,7 @@ class PBCT:
             )
             print(format(pos+1, 'b'), end='\x1b[1K\r')
 
+            parent_node['children'] = (child1, child2)
 
             if not child1['is_leaf']:
                 node_queue.append(child1)
@@ -520,16 +529,6 @@ class PBCT:
             tree=self.tree,
         )
         joblib.dump(model_data, path)
-
-    # TODO: Should not be method. Store hyperparameters.
-    def load(self, path=None):
-        if self.savepath is not None:
-            path = self.savepath
-        elif path is None:
-            raise TypeError('self.savepath must be set or argument path'
-                            'must be given.')
-
-        model_data = joblib.load(path)
 
     # TODO: Decide wether to normalize by total # of leaves.
     # TODO: Determine if calculating on each axis really makes sense.

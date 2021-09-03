@@ -1,1 +1,1 @@
-from PBCT.classes import PBCT, PBCTClassifier
+from PBCT.classes import PBCT, PBCTClassifier, load_model

@@ -1,13 +1,15 @@
+from pathlib import Path
 from time import time
-from PBCT import PBCT, PBCTClassifier
+from PBCT import PBCT, PBCTClassifier, load_model
 from make_examples import gen_interaction_func, gen_imatrix
 
 
 def test_PBCT(shape, nattrs, classes=[PBCT], min_samples_leaf=1, **class_args):
     func, strfunc = gen_interaction_func(nattrs)
     print('Using following interaction rule:', strfunc)
-    print('Generating synthetic data...')
+    print('Generating synthetic data...', end=' ')
     XX, Y  = gen_imatrix(shape, nattrs, func)
+    print('Done.')
     times = []
 
     for class_ in classes:
@@ -15,14 +17,21 @@ def test_PBCT(shape, nattrs, classes=[PBCT], min_samples_leaf=1, **class_args):
         name = class_.__name__
         module = class_.__module__
         desc = class_.__doc__
-        print(name + ': ' + str(desc))
+        print('\n' + name + ': ' + str(desc))
         print('Fitting model...')
         t0 = time()
         pbct.fit(XX, Y)
         tf = time()-t0
         print(f'It took {tf} s.')
 
-        print('Predicting...')
+        print('Testing save/load...', end=' ')
+        path_model = Path('model.dict.joblib')
+        pbct.save(path_model)
+        pbct = load_model(path_model)
+        path_model.unlink()
+        print('OK.')
+
+        print('Predicting...', end=' ')
         t0 = time()
         Yp = pbct.predict(XX, simple_mean=True)
         tp = time()-t0
@@ -34,6 +43,7 @@ def test_PBCT(shape, nattrs, classes=[PBCT], min_samples_leaf=1, **class_args):
             raise RuntimeError(name + ' did not performed perfectly! (acc'
                                f'uracy == {acc} != 1, chance == {Y.mean()})')
         print(f'ACC == 1 : {verified}')
+        print('Everything OK!')
 
         times.append(dict(module=module, name=name, time_fit=tf, time_pred=tp,
                           accuracy=acc, desc=desc))
