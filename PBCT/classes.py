@@ -1,8 +1,5 @@
 #!/bin/env python
-"""Provides a PBCT classifier implementation and related tools.
-
-Main version, aggregating all the knowledge from other versions
-experimentation.
+"""Provides a PBCT classifier implementation, as proposed by Pliakos, Geurts and Vens in 2018 (DOI: 10.1007/s10994-018-5700-x).
 
 Classes
 -------
@@ -14,7 +11,7 @@ Classes
 #       in database. Preprocessing it (i.e. averaging) may enhance performance.
 #       Changes in Node.predict must follow. You can also force to not happen.
 
-import json
+import joblib
 from itertools import product
 import numba
 import pandas as pd
@@ -33,6 +30,28 @@ def ax_means(Y):
     dims = tuple(range(Y.ndim))
     all_but_i = (dims[:i] + dims[i+1:] for i in dims)
     return [Y.mean(axis=ax) for ax in all_but_i]
+
+
+def select_from_local_ids(XX, Y, ids, local_ids, axis):
+    """Given indices to go to each side, split XX and Y in 2."""
+
+    local_ids1, local_ids2 = local_ids
+
+    ids1, ids2 = ids.copy(), ids.copy()
+    ids1[axis] = ids[axis][local_ids1]
+    ids2[axis] = ids[axis][local_ids2]
+
+    XX1, XX2 = XX.copy(), XX.copy()
+    XX1[axis] = XX[axis][local_ids1]
+    XX2[axis] = XX[axis][local_ids2]
+
+    Y_slice1 = [slice(None)] * Y.ndim
+    Y_slice2 = [slice(None)] * Y.ndim
+    Y_slice1[axis] = local_ids1
+    Y_slice2[axis] = local_ids2
+    Y1, Y2 = Y[tuple(Y_slice1)], Y[tuple(Y_slice2)]
+
+    return [(XX1, Y1, ids1), (XX2, Y2, ids2)]
 
 
 @numba.njit(fastmath=True)
@@ -189,14 +208,19 @@ class PBCT:
                  min_samples_leaf=DEFAULTS['min_samples_leaf'], split_min_quality=0,
                  leaf_target_quality=1, max_variance=0):
         """Instantiate new PBCT."""
-        self.savepath = savepath
-        self.verbose = verbose
-        self.max_depth = max_depth
-        # TODO: make it one value per axis.
-        self.min_samples_leaf = min_samples_leaf
-        self.split_min_quality = split_min_quality
-        self.leaf_target_quality = leaf_target_quality
-        self.max_variance = max_variance
+
+        self.parameters = dict(
+            savepath=savepath,
+            verbose=verbose,
+            max_depth=max_depth,
+            # TODO: make it one value per axis.
+            min_samples_leaf=min_samples_leaf,
+            split_min_quality=split_min_quality,
+            leaf_target_quality=leaf_target_quality,
+            max_variance=max_variance,
+        )
+        for k, v in self.parameters.items():
+            setattr(self, k, v)
 
     def _find_best_split(self, X, Y_means, Y_sq_means, Yvar):
         return _find_best_split(X, Y_means, Y_sq_means,
@@ -292,22 +316,11 @@ class PBCT:
         else:
             q, cutoff, ids1, ids2, axis, attr_id = best_split
 
-            XX1, XX2 = XX.copy(), XX.copy()
-            XX1[axis] = XX[axis][ids1]
-            XX2[axis] = XX[axis][ids2]
-
-            Y_slice1 = [slice(None)] * Y.ndim
-            Y_slice2 = [slice(None)] * Y.ndim
-            Y_slice1[axis] = ids1
-            Y_slice2[axis] = ids2
-            Y1, Y2 = Y[tuple(Y_slice1)], Y[tuple(Y_slice2)]
-
             node = dict(
                 is_leaf=False,
                 cutoff=cutoff,
                 coord=(axis, attr_id),
-                XXXX=(XX1, XX2),
-                YY=(Y1, Y2),
+                local_ids=(ids1, ids2),
                 quality=q,
             )
 
@@ -316,26 +329,57 @@ class PBCT:
 
     def _build_tree(self, XX, Y):
         """Build decision tree as nested dicts."""
-        tree = self._make_node(XX, Y, pos=0, depth=0)
+
+        tree = self._make_node(
+            XX, Y, pos=0, depth=0,
+            ids = [np.arange(i) for i in Y.shape],
+        )
+
         if tree['is_leaf']: return tree
         node_queue = [tree]
 
         while node_queue:
-            parent_node = node_queue.pop()
-            # NOTE: is pos simply loop count in binary for BFS?
+            parent_node = node_queue.pop(0)  # With a zero is BFS, else is DFS.
+            # Interestingly, pos is simply loop count in binary, for BFS in a
+            # complete tree.
             # pos == 0b01101 means left right right left right
             pos = parent_node['pos'] << 1
             dep = parent_node['depth'] + 1
-            XX1, XX2 = parent_node['XXXX']
-            Y1, Y2 = parent_node['YY']
-            del parent_node['XXXX'], parent_node['YY']
+            parent_ids = parent_node['ids']
+            axis = parent_node['coord'][0]
+            # local_ids are based on the considered submatrix, while ids refers
+            # to the whole initial Y.
 
-            # TODO: Calculate feature importances here or save Y.shape
-            child1 = self._make_node(XX1, Y1, depth=dep, pos=pos, Yshape=Y1.shape)
-            print(bin(pos)[2:], end='\x1b[1K\r')
-            child2 = self._make_node(XX2, Y2, depth=dep, pos=pos+1, Yshape=Y2.shape)
-            print(bin(pos+1)[2:], end='\x1b[1K\r')
-            parent_node['children'] = (child1, child2)
+            XYi1, XYi2 = select_from_ids(
+                *parent_node['XXY'],
+                ids,
+                parent_node['local_ids'],
+                axis
+            )
+            XX1, Y1, ids1, XX2, Y2, ids2 = *XYi1, *XYi2
+            del parent_node['XXY']
+
+            # TODO: Use a loop here?
+            child1 = self._make_node(
+                XX1, Y1,
+                XXY=(XX1, Y1),  # FIXME: Gambiarra alert.
+                depth=dep,
+                pos=pos,
+                ids=ids1,
+                Yshape=Y1.shape,
+            )
+            print(format(pos, 'b'), end='\x1b[1K\r')
+
+            child2 = self._make_node(
+                XX2, Y2,
+                XXY=(XX2, Y2),  # FIXME: Gambiarra alert.
+                depth=dep,
+                pos=pos+1,
+                ids=ids2,
+                Yshape=Y2.shape,
+            )
+            print(format(pos+1, 'b'), end='\x1b[1K\r')
+
 
             if not child1['is_leaf']:
                 node_queue.append(child1)
@@ -471,8 +515,11 @@ class PBCT:
             raise TypeError('self.savepath must be set or argument path'
                             'must be given.')
 
-        with open(path, 'w') as fp:
-            json.dump(self.tree, fp)
+        model_data = dict(
+            parameters=self.parameters,
+            tree=self.tree,
+        )
+        joblib.dump(model_data, path)
 
     # TODO: Should not be method. Store hyperparameters.
     def load(self, path=None):
@@ -482,8 +529,7 @@ class PBCT:
             raise TypeError('self.savepath must be set or argument path'
                             'must be given.')
 
-        with open(path) as fp:
-            self.tree = json.load(fp)
+        model_data = joblib.load(path)
 
     # TODO: Decide wether to normalize by total # of leaves.
     # TODO: Determine if calculating on each axis really makes sense.
