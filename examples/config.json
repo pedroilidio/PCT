@@ -1,0 +1,7 @@
+{
+"predict": true,
+"XX": ["input/X1.csv input/X2.csv"],
+"Y": "predictions.csv",
+"path_model": "trained_model.json",
+"verbose": true
+}

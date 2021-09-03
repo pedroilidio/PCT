@@ -8,12 +8,12 @@ setup(name='PBCT',
       author_email='ilidio@alumni.usp.br',
       license='GPLv3',
       packages=['PBCT'],
-      scripts=['bin/PBCT']
+      scripts=['bin/PBCT'],
       zip_safe=False,
       install_requires=[
           'pandas', 'numpy', 'numba', 'tqdm',
-      ]
+      ],
       extras_require={
           'Tree visualization': ['graphviz', 'matplotlib'],
-      }
+      },
 )

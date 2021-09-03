@@ -1,1 +1,1 @@
-from PBCT import PBCT, PBCTClassifier
+from PBCT.classes import PBCT, PBCTClassifier

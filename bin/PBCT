@@ -2,7 +2,8 @@
 import argparse
 import json
 import numpy as np
-from PBCT import PBCT, PBCTClassifier, DEFAULTS
+from PBCT import PBCT, PBCTClassifier
+from PBCT.classes import DEFAULTS
 
 
 def parse_args():
@@ -32,12 +33,11 @@ def parse_args():
               '\n\t"fit": "true",'
               '\n\t"XX": ["/path/to/X1.csv", "/path/to/X2.csv"],'
               '\n\t"Y": "/path/to/Y.csv",'
-              '\n\t"XX_names": ["/path/to/X1_names.txt",  "/path/to/X2_names.txt"],'
-              '\n\t"XX_col_names": ["/path/to/X1_col_names.txt", "/path/to/X2_col_names.txt"],'
-              '\n}'
-              'being *_names files optional. Multiple dicts in a list will caus'
-              'e this script to run multiple times. Set "fit" and "predict" to'
-              '"false" in order to disable a specific run.'))
+              #'\n\t"XX_names": ["/path/to/X1_names.txt",  "/path/to/X2_names.txt"],'
+              #'\n\t"XX_col_names": ["/path/to/X1_col_names.txt", "/path/to/X2_col_names.txt"],'
+              '\n}.'
+              ' Multiple dicts in a list will caus'
+              'e this script to run multiple times.'))
 
     arg_parser.add_argument(
         '--XX', nargs='+',
@@ -137,7 +137,6 @@ def main(**kwargs):
             verbose=kwargs['verbose'],
         )
         print('Saving...')
-        predictions = Tree.predict(
         np.savetxt(predictions, kwargs['Y'], delimiter=',')
         print('Done.')
 
