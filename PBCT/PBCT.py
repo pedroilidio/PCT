@@ -18,16 +18,14 @@ import numba
 from itertools import product
 import pandas as pd
 import numpy as np
-import graphviz
 from tqdm.auto import tqdm, trange
-from matplotlib import colors
-import colorsys
-from matplotlib.cm import get_cmap
 
-DEF_PATH_MODEL = 'model_data.json'
-DEF_MAX_DEPTH = 30
-DEF_MIN_SAMPLES_LEAF = 20
-DEF_PATH_RENDERING = 'model'
+DEFAULTS = dict(
+    path_model='trained_model.json',
+    min_samples_leaf=20,
+    max_depth=-1,
+    path_rendering='model_visualization',
+)
 
 
 def ax_means(Y):
@@ -186,8 +184,8 @@ def _find_best_split_binY(X, Y_means, Yvar, min_samples_leaf):
 class PBCT:
     """self.tree is nested dicts, itertools.product over np broadcast, JIT compiled _find_best_split"""
 
-    def __init__(self, savepath=None, verbose=False, max_depth=DEF_MAX_DEPTH,
-                 min_samples_leaf=DEF_MIN_SAMPLES_LEAF, split_min_quality=0,
+    def __init__(self, savepath=None, verbose=False, max_depth=DEFAULTS['max_depth'],
+                 min_samples_leaf=DEFAULTS['min_samples_leaf'], split_min_quality=0,
                  leaf_target_quality=1, max_variance=0):
         """Instantiate new PBCT."""
         self.savepath = savepath
@@ -331,10 +329,11 @@ class PBCT:
             Y1, Y2 = parent_node['YY']
             del parent_node['XXXX'], parent_node['YY']
 
-            child1 = self._make_node(XX1, Y1, depth=dep, pos=pos)
-            print('\x1b[1K\r' + bin(pos)[2:], end='')
-            child2 = self._make_node(XX2, Y2, depth=dep, pos=pos+1)
-            print('\x1b[1K\r' + bin(pos+1)[2:], end='')
+            # TODO: Calculate feature importances here or save Y.shape
+            child1 = self._make_node(XX1, Y1, depth=dep, pos=pos, Yshape=Y1.shape)
+            print(bin(pos)[2:], end='\x1b[1K\r')
+            child2 = self._make_node(XX2, Y2, depth=dep, pos=pos+1, Yshape=Y2.shape)
+            print(bin(pos+1)[2:], end='\x1b[1K\r')
             parent_node['children'] = (child1, child2)
 
             if not child1['is_leaf']:
@@ -415,7 +414,7 @@ class PBCT:
         if any_known:
             return leaf['Y'][tuple(Y_slice)].mean()
         else:
-            return ax_Ymean
+            return ax_Ymean  # FIXME
 
     def predict(self, XX, simple_mean=False, verbose=False):
         """Predict prob. of interaction between rows and columns objects.
@@ -474,6 +473,7 @@ class PBCT:
         with open(path, 'w') as fp:
             json.dump(self.tree, fp)
 
+    # TODO: Should not be method. Store hyperparameters.
     def load(self, path=None):
         if self.savepath is not None:
             path = self.savepath
@@ -484,9 +484,44 @@ class PBCT:
         with open(path) as fp:
             self.tree = json.load(fp)
 
+    # TODO: Decide wether to normalize by total # of leaves.
+    # TODO: Determine if calculating on each axis really makes sense.
+    def feature_importances(self, node=None, ret=None):
+        """Calculate Mean Decrease in Impurity for a trained tree, in each axis."""
+        
+        is_root_call = ret is None
+        if is_root_call:
+            node = self.tree
+            ret = dict(cols={}, rows={}, total={})
+        #   feature_importances.n_nodes = dict(rows=0, cols=0, total=0)
+        
+        if node['is_leaf']:
+            return ret
+        
+        # feature_importances.n_nodes['total'] += 1
+        # feature_importances.n_nodes[node.split_axis] += 1
+        print(bin(node['pos'])[2:], end='\x1b[1K\r')
+        shape = node['Yshape']
+        name = node['coord']
+        
+        # of rows, # of cols, total items.
+        sizes = dict(rows=shape[0], cols=shape[1], total=shape[0]*shape[1])
+        
+        for key, size in sizes.items():
+            ret[key][name] = ret[key].get(name, 0) + size * node['quality']
+        
+        for child in node['children']:
+            ret = self.feature_importances(child, ret=ret)
+        
+        if is_root_call:
+            ret = pd.DataFrame(ret).sort_values('total', ascending=False)
+            ret /= sizes
+            # ret /= feature_importances.n_nodes  # sizes already decrease with node number?
+        return ret
+
 
 class PBCTClassifier(PBCT):
-    """Equals to PBCT, except for assuming binary interaction matrix."""
+    """It's PBCT (see class def), but assuming the interaction matrix to be binary."""
 
     def _find_best_split(self, X, Y_means, Yvar):
         return _find_best_split_binY(X, Y_means, Yvar,

@@ -8,7 +8,7 @@ Classes
 -------
     PBCT*
 """
-# TODO: Cost-complexity prunning.
+# TODO: Post-prunning.
 # TODO: Lookahead.
 # TODO: There are duplicate instances which receives different labels
 #       in database. Preprocessing it (i.e. averaging) may enhance performance.
@@ -925,36 +925,38 @@ def split_kfold(Xrows, Xcols, Y, k=5):
     return splits
 
 
-def feature_importances(node,
-                        ret=dict(cols={}, rows={}, total={}),
-                        is_root_call=True):
-    if node.is_leaf:
+def feature_importances(node, ret=None):
+    """Calculate Mean Decrease in Impurity for a trained tree, in each axis."""
+    
+    is_root_call = ret is None
+    if is_root_call:
+        ret = dict(cols={}, rows={}, total={})
+    #   feature_importances.n_nodes = dict(rows=0, cols=0, total=0)
+    
+    if node['is_leaf']:
         return ret
-    # if is_root_call:
-    #     feature_importances.n_nodes = dict(rows=0, cols=0, total=0)
-    #     
+    
     # feature_importances.n_nodes['total'] += 1
     # feature_importances.n_nodes[node.split_axis] += 1
-    shape = node.shape
-    name = (node.split_axis, node.attr_name)
+    print(bin(node['pos'])[2:], end='\x1b[1K\r')
+    shape = node['Yshape']
+    name = node['coord']
     
     # of rows, # of cols, total items.
     sizes = dict(rows=shape[0], cols=shape[1], total=shape[0]*shape[1])
     
     for key, size in sizes.items():
-        ret[key][name] = ret[key].get(name, 0) + size * node.split_quality
+        ret[key][name] = ret[key].get(name, 0) + size * node['quality']
     
-    ret = feature_importances(node.big_child, ret=ret,
-                              is_root_call=False)
-    ret = feature_importances(node.little_child, ret=ret,
-                              is_root_call=False)
+    for child in node['children']:
+        ret = feature_importances(child, ret=ret)
     
     if is_root_call:
         ret = pd.DataFrame(ret).sort_values('total', ascending=False)
         ret /= sizes
         # ret /= feature_importances.n_nodes  # sizes already decrease with node number?
     return ret
-    
+
     
 def parse_args():
     arg_parser = argparse.ArgumentParser(
