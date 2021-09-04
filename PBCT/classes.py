@@ -24,6 +24,7 @@ DEFAULTS = dict(
     max_depth=-1,
     path_rendering='model_visualization',
 )
+CLEAN_AND_RETURN = '\x1b[1K\r'
 
 
 def load_model(path):
@@ -376,7 +377,8 @@ class PBCT:
                 ids=ids1,
                 Yshape=Y1.shape,
             )
-            print(format(pos, 'b'), end='\x1b[1K\r')
+            # Minimal progress report.
+            print(CLEAN_AND_RETURN + format(pos, 'b'), end='')
 
             child2 = self._make_node(
                 XX2, Y2,
@@ -386,7 +388,7 @@ class PBCT:
                 ids=ids2,
                 Yshape=Y2.shape,
             )
-            print(format(pos+1, 'b'), end='\x1b[1K\r')
+            print(CLEAN_AND_RETURN + format(pos+1, 'b'), end='')
 
             parent_node['children'] = (child1, child2)
 
@@ -432,7 +434,7 @@ class PBCT:
         XX, Y, X_names = self._polish_input(XX, Y, X_names)
         self.tree = self._build_tree(XX, Y)
 
-    def _predict_sample(self, xx, simple_mean=False, verbose=False):
+    def _predict_sample(self, xx, simple_mean=True, verbose=False):
         """Predict prob. of interaction given each object's attributes.
 
         Predict the probability of existing interaction between two ob-
@@ -449,6 +451,10 @@ class PBCT:
             self._pbar.update()
         if simple_mean:
             return leaf['mean']
+        else:
+            raise NotImplementedError(
+                'Please use simple_mean=True when predicting.'
+            )
 
         # Search for known instances in training set (XX) and use their
         # interaction probability as result if any was found.
@@ -470,7 +476,7 @@ class PBCT:
         else:
             return ax_Ymean  # FIXME
 
-    def predict(self, XX, simple_mean=False, verbose=False):
+    def predict(self, XX, ax=None, simple_mean=True, verbose=False):
         """Predict prob. of interaction between rows and columns objects.
 
         Predict the probability of ocurring interaction between two arrays
@@ -516,6 +522,38 @@ class PBCT:
             del self._pbar
 
         return Y_pred
+
+    def _ax_predict_sample(self, x, axis=0):
+        """For an instance of one axis, predict prob. of interaction with train
+        ing data of the other.
+        """
+        leafs = []
+        queue = [self.tree]  # Initiate leaf search on root.
+
+        while queue:
+            node = queue.pop()
+            if node['is_leaf']:
+                leafs.append(node)
+            else:
+                ax, attr_idx = node['coord']  # Split coordinates.
+                if ax != axis:
+                    for child in node['children']:
+                        queue.append(child)
+                else:
+                    right = x[attr_idx] >= node['cutoff']
+                    queue.append(node['children'][right])
+
+        ids = np.hstack([leaf['ids'][not axis] for leaf in leafs])
+        pred = np.hstack([leaf['axmeans'][not axis] for leaf in leafs])
+        return pred[ids]
+
+    def ax_predict(self, X, axis=0, verbose=False):
+        if isinstance(X, pd.DataFrame):
+            X = X.values
+        if verbose:
+            X = tqdm(X)
+        ret = np.array([self._ax_predict_sample(x, axis=axis) for x in X])
+        return ret
 
     def save(self, path=None):
         if self.savepath is not None:

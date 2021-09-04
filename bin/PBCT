@@ -2,7 +2,7 @@
 import argparse
 import json
 import numpy as np
-from PBCT import PBCT, PBCTClassifier
+from PBCT import PBCT, PBCTClassifier, load_model
 from PBCT.classes import DEFAULTS
 
 
@@ -71,11 +71,11 @@ def parse_args():
         '--min_samples_leaf', default=DEFAULTS['min_samples_leaf'],
         help=('Minimum number of sample pairs in the training set required'
               ' to arrive at each leaf.'))
-    arg_parser.add_argument(
-        '--simple_mean', action='store_true',
-        help=('If provided, the prototype function will always return the '
-              'mean value over the entire sub interaction matrix of the leaf'
-              ', not considering possible known instances.'))
+    # arg_parser.add_argument(
+    #     '--simple_mean', action='store_true',
+    #     help=('If provided, the prototype function will always return the '
+    #           'mean value over the entire sub interaction matrix of the leaf'
+    #           ', not considering possible known instances.'))
     arg_parser.add_argument(
         '--verbose', '-v', action='store_true',
         help='Show more detailed output')
@@ -97,17 +97,29 @@ def parse_args():
 
 
 def main(**kwargs):
-    """
-    Train a PBCT or predict values from the command-line. See `parse_args()`
-    or use --help for parameters' description.
+    """CLI for using PBCTs.
+
+    Command-line utility for training a PBCT or using a trained model to predic
+    t new interactions. See `parse_args()` or use --help for parameters' descri
+    ption.
     """
 
     if kwargs['config'] is not None:
-        kwargs.update(json.load(kwargs['config']))
+        # If config file is a single dict, load its options and proceed.
+        # If it's a list of dicts, run this function for each of them.
+        with open(kwargs['config']) as config_file:
+            config = json.load(config_file)
+        if isinstance(config, dict):
+            kwargs.update(config)
+        elif isinstance(config, list):
+            # Ensure we are not caugth in the top conditional again.
+            kwargs['config'] = None
+            for jsonkwargs in config:
+                main(**(kwargs | jsonkwargs))
+            return
 
     print('Loading data...')
     XX = [np.loadtxt(p, delimiter=',') for p in kwargs['XX']]
-    Y = np.loadtxt(kwargs['Y'], delimiter=',')
     XX_names, XX_col_names = None, None
     # if kwargs['XX_names']:
     #     XX_names = [np.loadtxt(p) for p in kwargs['XX_names']]
@@ -115,6 +127,7 @@ def main(**kwargs):
         XX_col_names = [np.loadtxt(p) for p in kwargs['XX_col_names']]
 
     if kwargs['fit']:
+        Y = np.loadtxt(kwargs['Y'], delimiter=',')
         Tree = PBCT(
             min_samples_leaf=kwargs['min_samples_leaf'],
             max_depth=kwargs['max_depth'],
@@ -129,15 +142,15 @@ def main(**kwargs):
 
     elif kwargs['predict']:
         print('Loading model...')
-        Tree = PBCT().load(kwargs['path_model'])
+        Tree = load_model(kwargs['path_model'])
         print('Predicting values...')
         predictions = Tree.predict(
             XX,
-            simple_mean=kwargs['simple_mean'],
+            # simple_mean=kwargs['simple_mean'],
             verbose=kwargs['verbose'],
         )
         print('Saving...')
-        np.savetxt(predictions, kwargs['Y'], delimiter=',')
+        np.savetxt(kwargs['Y'], predictions, delimiter=',', fmt='%d')
         print('Done.')
 
 

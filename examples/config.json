@@ -1,7 +1,13 @@
+[{
+    "fit": true,
+    "XX": ["input/X1.csv", "input/X2.csv"],
+    "Y": "input/Y.csv",
+    "path_model": "output/trained_model.dict.pickle.gz"
+},
 {
-"predict": true,
-"XX": ["input/X1.csv input/X2.csv"],
-"Y": "predictions.csv",
-"path_model": "trained_model.json",
-"verbose": true
-}
+    "predict": true,
+    "XX": ["input/X1.csv", "input/X2.csv"],
+    "Y": "output/predictions.csv",
+    "path_model": "output/trained_model.dict.pickle.gz",
+    "verbose": true,
+}]
