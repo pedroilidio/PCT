@@ -74,9 +74,5 @@ optional arguments:
   --min_samples_leaf MIN_SAMPLES_LEAF
                         Minimum number of sample pairs in the training set
                         required to arrive at each leaf. (default: 20)
-  --simple_mean         If provided, the prototype function will always return
-                        the mean value over the entire sub interaction matrix
-                        of the leaf, not considering possible known instances.
-                        (default: False)
   --verbose, -v         Show more detailed output (default: False)
 ```
