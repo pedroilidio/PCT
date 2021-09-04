@@ -1,4 +1,4 @@
-# Train a PBCT tree and save it to 'trained_model.json'.
+# Train a PBCT tree and save it to 'output/trained_model.dict.pickle.gz'.
 PBCT --fit --XX input/X1.csv input/X2.csv --Y input/Y.csv \
      --path_model output/trained_model.dict.pickle.gz
 
