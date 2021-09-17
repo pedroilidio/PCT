@@ -23,29 +23,35 @@ We provide a command-line utility to use PBCT models, that shows the following i
 ```
 $ PBCT --help
 
-usage: PBCT [-h] [--fit | --predict] [--config CONFIG] [--XX XX [XX ...]]
+usage: PBCT [-h] [--config CONFIG] [--XX XX [XX ...]]
             [--XX_names XX_NAMES [XX_NAMES ...]]
             [--XX_col_names XX_COL_NAMES [XX_COL_NAMES ...]] [--Y Y]
             [--path_model PATH_MODEL] [--max_depth MAX_DEPTH]
-            [--min_samples_leaf MIN_SAMPLES_LEAF] [--simple_mean] [--verbose]
+            [--min_samples_leaf MIN_SAMPLES_LEAF] [--verbose]
+            [--outdir OUTDIR] [--k K [K ...]] [--diag]
+            [--test_size TEST_SIZE [TEST_SIZE ...]]
+            [--train_size TRAIN_SIZE [TRAIN_SIZE ...]] [--njobs NJOBS]
+            [--random_state RANDOM_STATE]
+            [{fit,predict,train_test,xval}]
 
 Fit a PBCT model to data or use a trained model to predict new results. Input
 files and options may be provided either with command-line options or by a
 json config file (see --config option).
 
+positional arguments:
+  {fit,predict,train_test,xval}
+                        fit: Use input data to train a PBCT. predict: Predict
+                        interaction between input instances. train_test: Split
+                        data between the 4 train/test sets, train and test a
+                        PBCT. xval: run a 2D k-fold cross validation with the
+                        given data. (default: None)
+
 optional arguments:
   -h, --help            show this help message and exit
-  --fit                 Use input data to train a PBCT. (default: False)
-  --predict             Predict interaction between input instances. (default:
-                        False)
-  --config CONFIG       Load options from json file. File example:
-                        {
-                            "path_model": "/path/to/save/model.json",
-                            "fit": "true",
-                            "XX": ["/path/to/X1.csv", "/path/to/X2.csv"],
-                            "Y": "/path/to/Y.csv"
-                        }.
-                        Multiple dicts in a list
+  --config CONFIG       Load options from json file. File example: {
+                        "path_model": "/path/to/save/model.json", "fit":
+                        "true", "XX": ["/path/to/X1.csv", "/path/to/X2.csv"],
+                        "Y": "/path/to/Y.csv", }. Multiple dicts in a list
                         will cause this script to run multiple times.
                         (default: None)
   --XX XX [XX ...]      Paths to .csv files containing rows of numerical
@@ -67,7 +73,7 @@ optional arguments:
   --path_model PATH_MODEL
                         When fitting: path to the location where the model
                         will be saved. When predicting: the saved model to be
-                        used. (default: trained_model.json)
+                        used. (default: model.dict.pickle.gz)
   --max_depth MAX_DEPTH
                         Maximum PBCT depth allowed. -1 will disable this
                         stopping criterion. (default: -1)
@@ -75,4 +81,26 @@ optional arguments:
                         Minimum number of sample pairs in the training set
                         required to arrive at each leaf. (default: 20)
   --verbose, -v         Show more detailed output (default: False)
+  --outdir OUTDIR       Where to save results. (default: PBCT_results)
+  --k K [K ...], -k K [K ...]
+                        Number of folds for cross-validation. (default: [3])
+  --diag                Use independent TrTc sets for cross-validation, i.e.
+                        with no overllaping rows or columns. (default: False)
+  --test_size TEST_SIZE [TEST_SIZE ...]
+                        If between 0.0 and 1.0, represents the proportion of
+                        the dataset to include in the TrTc split for each
+                        axis, e.g.: .3 .5 means 30% of the rows and 50% of the
+                        columns will be used as the TrTc set. If >= 1,
+                        represents the absolute number of test samples in each
+                        axis. If None, the values are set to the complements
+                        of train_size. If a single value v is given, it will
+                        be interpreted as (v, v). If train_size is also None,
+                        it will be set to 0.25. (default: None)
+  --train_size TRAIN_SIZE [TRAIN_SIZE ...]
+                        Same as test_size, but refers to the LrLc set
+                        dimensions. (default: None)
+  --njobs NJOBS         How many processes to spawn when cross-validating.
+                        (default: None)
+  --random_state RANDOM_STATE
+                        Random seed to use. (default: None)
 ```

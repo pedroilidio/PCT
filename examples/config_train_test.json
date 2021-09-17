@@ -1,0 +1,15 @@
+[{
+    "action": "train_test",
+    "XX": ["input/X1.csv", "input/X2.csv"],
+    "Y": "input/Y.csv",
+    "outdir": "out_train_test"
+},
+{
+    "action": "xval",
+    "XX": ["input/X1.csv", "input/X2.csv"],
+    "Y": "input/Y.csv",
+    "k": 6,
+    "diag": true,
+    "outdir": "out_xval",
+    "njobs": 6
+}]

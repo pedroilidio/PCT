@@ -19,7 +19,7 @@ import numpy as np
 from tqdm.auto import tqdm, trange
 
 DEFAULTS = dict(
-    path_model='trained_model.json',
+    path_model='model.dict.pickle.gz',
     min_samples_leaf=20,
     max_depth=-1,
     path_rendering='model_visualization',
@@ -407,6 +407,10 @@ class PBCT:
             XX = [X.values for X in XX]
             Y = Y.values
 
+        if isinstance(XX, tuple):
+            # We will use list.copy(), and copy.copy() is slower
+            XX = list(XX)
+
         # Check dimensions.
         X_shapes0 = tuple(X.shape[0] for X in XX)
         X_shapes1 = tuple(X.shape[1] for X in XX)
@@ -570,6 +574,7 @@ class PBCT:
 
     # TODO: Decide wether to normalize by total # of leaves.
     # TODO: Determine if calculating on each axis really makes sense.
+    @property
     def feature_importances(self, node=None, ret=None):
         """Calculate Mean Decrease in Impurity for a trained tree, in each axis."""
         

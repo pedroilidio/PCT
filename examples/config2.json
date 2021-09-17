@@ -1,5 +1,5 @@
 {
-"fit": true,
+"action": "fit",
 "XX": ["input/X1.csv", "input/X2.csv"],
 "Y": "input/Y.csv",
 "path_model": "output/trained_model.dict.pickle.gz"
