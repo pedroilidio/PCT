@@ -85,7 +85,7 @@ optional arguments:
   --k K [K ...], -k K [K ...]
                         Number of folds for cross-validation. (default: [3])
   --diag                Use independent TrTc sets for cross-validation, i.e.
-                        with no overllaping rows or columns. (default: False)
+                        with no overlapping rows or columns. (default: False)
   --test_size TEST_SIZE [TEST_SIZE ...]
                         If between 0.0 and 1.0, represents the proportion of
                         the dataset to include in the TrTc split for each
