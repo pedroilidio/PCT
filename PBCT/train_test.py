@@ -1,13 +1,38 @@
+import contextlib
 from copy import deepcopy
-import multiprocessing as mp
+from joblib import Parallel, delayed
+# import joblib
+# from tqdm.auto import tqdm
 import numpy as np
 import PBCT
 
 
-def fit_and_test(model, split):
+# https://stackoverflow.com/a/58936697/11286509
+# @contextlib.contextmanager
+# def tqdm_joblib(tqdm_object):
+#     """Context manager to patch joblib to report into tqdm progress bar given as argument"""
+#     class TqdmBatchCompletionCallback(joblib.parallel.BatchCompletionCallBack):
+#         def __init__(self, *args, **kwargs):
+#             super().__init__(*args, **kwargs)
+# 
+#         def __call__(self, *args, **kwargs):
+#             tqdm_object.update(n=self.batch_size)
+#             return super().__call__(*args, **kwargs)
+# 
+#     old_batch_callback = joblib.parallel.BatchCompletionCallBack
+#     joblib.parallel.BatchCompletionCallBack = TqdmBatchCompletionCallback
+#     try:
+#         yield tqdm_object
+#     finally:
+#         joblib.parallel.BatchCompletionCallBack = old_batch_callback
+#         tqdm_object.close()
+        
+
+def fit_and_test(model, split, predict_lrlc=False):
     model.fit(*split['LrLc'])
     return {LT: model.predict(XX)
-            for LT, (XX, Y) in split.items() if LT != 'LrLc'}
+            for LT, (XX, Y) in split.items()
+            if predict_lrlc or LT != 'LrLc'}
 
 
 def split_fit_test(XX, Y, model, **kwargs):
@@ -15,17 +40,22 @@ def split_fit_test(XX, Y, model, **kwargs):
     return split, fit_and_test(model, split)
 
 
-def cross_validate_2D(XX, Y, model, k=3, diag=False, njobs=None):
+def cross_validate_2D(XX, Y, model, k=None, diag=False,
+                      n_jobs=None, prefer=None, verbose=0):
     splits = PBCT.split_data.kfold_split(*XX, Y, k=k, diag=diag)
     models = [deepcopy(model) for _ in splits]
-    # predictions = [
-    #     fit_and_test(model, split)
-    #     for model, split in zip(models, splits)
-    # ]
-    with mp.Pool(njobs) as pool:
-        predictions = pool.starmap(fit_and_test, zip(models, splits))
-
-    return splits, models, predictions
+    
+    # with tqdm_joblib(tqdm(total=len(splits))):
+    #     predictions = Parallel(n_jobs, prefer=prefer)(
+    #         delayed(fit_and_test)(model, split)
+    #         for model, split in zip(models, splits)
+    #     )
+    predictions = Parallel(n_jobs, verbose=verbose, prefer=prefer)(
+        delayed(fit_and_test)(model, split)
+        for model, split in zip(models, splits)
+    )
+    
+    return dict(folds=splits, models=models, predictions=predictions)
 
 
 def save_split(split, dir_data):

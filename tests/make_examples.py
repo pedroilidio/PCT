@@ -2,10 +2,11 @@ from pathlib import Path
 import numpy as np
 
 
-def gen_imatrix(shape, nattrs, func=None, nrules=5):
+def gen_imatrix(shape, nattrs, func=None, nrules=5, quiet=False):
     if func is None:
         func, strfunc = gen_interaction_func(nattrs, nrules)
-        print('Generated interaction function \n\t', strfunc)
+        if not quiet:
+            print('Generated interaction function \n\t', strfunc)
     # shape contains the number of instances in each axis database, i.e.
     # its number of rows. nattrs contains their numbers of columns, i.e.
     # how many attributes per axis.

@@ -1,5 +1,7 @@
 import numpy as np
 
+DEFAULT_K = 3, 3
+
 
 # NOTE: We could simply use sklearn.model_selection._split._validate_shuffle_spl
 # it in test_size and train_size, but it would add another dependency.
@@ -122,7 +124,7 @@ def train_test_split(Xrows, Xcols, Y, test_size=None, train_size=None):
     return split_LT(Xrows, Xcols, Y, test_rows, test_cols)
 
 
-def kfold_split(Xrows, Xcols, Y, k=5, diag=False):
+def kfold_split(Xrows, Xcols, Y, k=None, diag=False):
     """Split 2D data into folds for cross validation.
     
     Parameters
@@ -142,8 +144,9 @@ def kfold_split(Xrows, Xcols, Y, k=5, diag=False):
     diag : bool
         If True, use independent TrTc sets, with no overlapping rows or columns.
     """
-    print(k, diag)
-    if isinstance(k, int):
+    if k is None:
+        k = DEFAULT_K
+    elif isinstance(k, int):
         k = k, k
     elif diag:
         raise ValueError('k must be an integer if diag is given.')

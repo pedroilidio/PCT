@@ -12,6 +12,7 @@ Classes
 #       Changes in Node.predict must follow. You can also force to not happen.
 
 import joblib
+import multiprocessing as mp
 from itertools import product
 import numba
 import pandas as pd
@@ -27,9 +28,11 @@ DEFAULTS = dict(
 CLEAN_AND_RETURN = '\x1b[1K\r'
 
 
-def load_model(path):
+def load_model(path, class_=None):
     model_data = joblib.load(path)
-    model = PBCT(**model_data['parameters'])
+    if class_ is None:
+        class_ = model_data['class']
+    model = class_(**model_data['parameters'])
     model.tree = model_data['tree']
     return model
 
@@ -63,7 +66,7 @@ def select_from_local_ids(XX, Y, ids, local_ids, axis):
 
 
 @numba.njit(fastmath=True)
-def _find_best_split(X, Y_means, Y_sq_means, Yvar, min_samples_leaf):
+def _find_best_split(attr_col, Y_means, Y_sq_means, Yvar, min_samples_leaf):
     """Find the best cuttof value of a row or column attribute.
 
     For a single attribute column, find the value wich most reduces the
@@ -98,13 +101,13 @@ def _find_best_split(X, Y_means, Y_sq_means, Yvar, min_samples_leaf):
         ids1, ids2 : array_like
             The indices of X's values below and above the cutoff.
     """
-    total_length = X.size
+    total_length = attr_col.size
     highest_quality = 0
     # The index right before the cutoff value in the sorted X.
     cut_id = -1
 
-    # Sort Ymeans by X.
-    sorted_ids = X.argsort()
+    # Sort Ymeans by the attribute values.
+    sorted_ids = attr_col.argsort()
     Y_means = Y_means[sorted_ids]
     Y_sq_means = Y_sq_means[sorted_ids]
 
@@ -127,9 +130,10 @@ def _find_best_split(X, Y_means, Y_sq_means, Yvar, min_samples_leaf):
     #        = <x^2> - <x>^2
 
     for j in range(i, Y2size+1):  # Y2size happens to be what I needed.
-        Y1var = Y1_sq_means_sum - Y1_means_sum ** 2 / Y1size
-        Y2var = Y2_sq_means_sum - Y2_means_sum ** 2 / Y2size
-        quality = 1 - (Y1var + Y2var) / total_length / Yvar
+        # sq_res is the sum of squared residuals (differences to the mean).
+        Y1sq_res = Y1_sq_means_sum - Y1_means_sum ** 2 / Y1size
+        Y2sq_res = Y2_sq_means_sum - Y2_means_sum ** 2 / Y2size
+        quality = 1 - (Y1sq_res + Y2sq_res) / total_length / Yvar
 
         ### Clearer but verboser equivalent:
         # Y1mean = Y1_means_sum / Y1size
@@ -160,24 +164,24 @@ def _find_best_split(X, Y_means, Y_sq_means, Yvar, min_samples_leaf):
         return None  # FIXME: Is it OK to return different types?
     else:
         ids1, ids2 = sorted_ids[:cut_id], sorted_ids[cut_id:]
-        cutoff = (X[ids1[-1]] + X[ids2[0]]) / 2
+        cutoff = (attr_col[ids1[-1]] + attr_col[ids2[0]]) / 2
         return highest_quality, cutoff, ids1, ids2
 
 
 # TODO: Really repeat the whole function def.?
 @numba.njit(fastmath=True)
-def _find_best_split_binY(X, Y_means, Yvar, min_samples_leaf):
+def _find_best_split_binY(attr_col, Y_means, Yvar, min_samples_leaf):
     """Equals to _find_best_split, but assumes Y content is binary.
 
     See _find_best_split().
     """
-    total_length = X.size
+    total_length = attr_col.size
     highest_quality = 0
     # The index right before the cutoff value in the sorted X.
     cut_id = -1
 
-    # Sort Ymeans by X.
-    sorted_ids = X.argsort()
+    # Sort Ymeans by the attribute values.
+    sorted_ids = attr_col.argsort()
     Y_means = Y_means[sorted_ids]
 
     # Split Y in Y1 and Y2.
@@ -186,9 +190,9 @@ def _find_best_split_binY(X, Y_means, Yvar, min_samples_leaf):
     Y2_means_sum = Y_means[i:].sum()
     Y1size, Y2size = i, total_length-i
 
-    for j in range(i, Y2size+1):  # Y2size happens to be what I needed.
-        Y1var = Y1_means_sum - Y1_means_sum ** 2 / Y1size
-        Y2var = Y2_means_sum - Y2_means_sum ** 2 / Y2size
+    for j in range(i, Y2size+1):   # Y2size happens to be what I needed.
+        Y1var = Y1_means_sum - Y1_means_sum ** 2 / Y1size  # Normalized.
+        Y2var = Y2_means_sum - Y2_means_sum ** 2 / Y2size  # Normalized.
         quality = 1 - (Y1var + Y2var) / total_length / Yvar
 
         if quality > highest_quality:
@@ -205,7 +209,7 @@ def _find_best_split_binY(X, Y_means, Yvar, min_samples_leaf):
         return None  # FIXME: Is it OK to return different types?
     else:
         ids1, ids2 = sorted_ids[:cut_id], sorted_ids[cut_id:]
-        cutoff = (X[ids1[-1]] + X[ids2[0]]) / 2
+        cutoff = (attr_col[ids1[-1]] + attr_col[ids2[0]]) / 2
         return highest_quality, cutoff, ids1, ids2
 
 
@@ -281,9 +285,8 @@ class PBCT:
 
         for axis, X in enumerate(XX):
             X_cols = enumerate(X.T)
-            if self.verbose:
-                X_cols = tqdm(X_cols, desc=f'ax={axis}',
-                              total=X.shape[1])
+            X_cols = tqdm(X_cols, desc=f'ax={axis}', total=X.shape[1],
+                          disable=self.verbose < 3)
 
             for attr_id, attr_col in X_cols:
                 split = self._find_best_split(attr_col, Y_ax_means[axis],
@@ -316,13 +319,15 @@ class PBCT:
             node = dict(
               # is_leaf=is_leaf,
                 is_leaf=True,
-                XX=XX,
+              # XX=XX,
               # Y=Y,
                 mean=Ymean,
                 axmeans=Y_ax_means,
             )
         else:
             q, cutoff, ids1, ids2, axis, attr_id = best_split
+            #col = XX[axis][:, attr_id]
+            #print((axis, attr_id), (cutoff-col.min())/(col.max()-col.min()))
 
             node = dict(
                 is_leaf=False,
@@ -343,8 +348,15 @@ class PBCT:
             ids = [np.arange(i) for i in Y.shape],
         )
 
-        if tree['is_leaf']: return tree
+        self.n_nodes = 1
+
+        if tree['is_leaf']:
+            self.n_leaves = 1
+            return tree
+
+        self.n_leaves = 0
         node_queue = [tree]
+
 
         while node_queue:
             parent_node = node_queue.pop(0)  # With a zero is BFS, else is DFS.
@@ -369,7 +381,7 @@ class PBCT:
             del parent_node['XXY']
 
             # TODO: Use a loop here?
-            child1 = self._make_node(
+            child0 = self._make_node(
                 XX1, Y1,
                 XXY=(XX1, Y1),  
                 depth=dep,
@@ -377,10 +389,11 @@ class PBCT:
                 ids=ids1,
                 Yshape=Y1.shape,
             )
-            # Minimal progress report.
-            print(CLEAN_AND_RETURN + format(pos, 'b'), end='')
+            if self.verbose >= 2:
+                # Minimal progress report.
+                print(CLEAN_AND_RETURN + format(pos, 'b'), end='')
 
-            child2 = self._make_node(
+            child1 = self._make_node(
                 XX2, Y2,
                 XXY=(XX2, Y2),
                 depth=dep,
@@ -388,16 +401,23 @@ class PBCT:
                 ids=ids2,
                 Yshape=Y2.shape,
             )
-            print(CLEAN_AND_RETURN + format(pos+1, 'b'), end='')
+            if self.verbose >= 2:
+                print(CLEAN_AND_RETURN + format(pos+1, 'b'), end='')
 
-            parent_node['children'] = (child1, child2)
+            parent_node[0] = child0
+            parent_node[1] = child1
+            self.n_nodes += 2
 
+            if not child0['is_leaf']:
+                node_queue.append(child0)
+            else:
+                self.n_leaves += 1
             if not child1['is_leaf']:
                 node_queue.append(child1)
-            if not child2['is_leaf']:
-                node_queue.append(child2)
+            else:
+                self.n_leaves += 1
 
-        print()
+        print('Trained.')
         return tree
 
     def _polish_input(self, XX, Y, X_names):
@@ -438,7 +458,7 @@ class PBCT:
         XX, Y, X_names = self._polish_input(XX, Y, X_names)
         self.tree = self._build_tree(XX, Y)
 
-    def _predict_sample(self, xx, simple_mean=True, verbose=False):
+    def _predict_sample(self, xx):
         """Predict prob. of interaction given each object's attributes.
 
         Predict the probability of existing interaction between two ob-
@@ -448,17 +468,11 @@ class PBCT:
 
         while not leaf['is_leaf']:
             ax, attr_idx = leaf['coord']  # Split coordinates.
-            right = xx[ax][attr_idx] >= leaf['cutoff']
-            leaf = leaf['children'][right]
+            leaf = leaf[xx[ax][attr_idx] >= leaf['cutoff']]
 
-        if verbose:
-            self._pbar.update()
-        if simple_mean:
-            return leaf['mean']
-        else:
-            raise NotImplementedError(
-                'Please use simple_mean=True when predicting.'
-            )
+        return leaf['mean']
+
+        #### TODO: solve known instance case below!
 
         # Search for known instances in training set (XX) and use their
         # interaction probability as result if any was found.
@@ -480,7 +494,7 @@ class PBCT:
         else:
             return ax_Ymean  # FIXME
 
-    def predict(self, XX, ax=None, simple_mean=True, verbose=False):
+    def predict(self, XX, ax=None, verbose=False, n_jobs=1):
         """Predict prob. of interaction between rows and columns objects.
 
         Predict the probability of ocurring interaction between two arrays
@@ -512,18 +526,20 @@ class PBCT:
 
         shape = tuple(len(X) for X in XX)
         ndim = len(XX)
+        prod_iter = product(*XX)
+        size = np.prod(shape)
+        chunksize = int(size/n_jobs) + 1  # Ceil it.
 
         if verbose:
-            self._pbar = tqdm(total=np.prod(shape))
+            prod_iter = tqdm(prod_iter, total=size)
 
-        Y_pred = [self._predict_sample(xx, simple_mean=simple_mean,
-                                       verbose=verbose)
-                  for xx in product(*XX)]
-        Y_pred = np.array(Y_pred).reshape(shape)
+        # Y_pred = [self._predict_sample(xx, verbose=verbose)
+        #           for xx in prod_iter]
 
-        if verbose:
-            self._pbar.close()
-            del self._pbar
+        with mp.Pool(n_jobs) as pool:
+            Y_pred = pool.imap(self._predict_sample, prod_iter,
+                               chunksize=chunksize)
+            Y_pred = np.fromiter(Y_pred, float).reshape(shape)
 
         return Y_pred
 
@@ -541,11 +557,10 @@ class PBCT:
             else:
                 ax, attr_idx = node['coord']  # Split coordinates.
                 if ax != axis:
-                    for child in node['children']:
-                        queue.append(child)
+                        queue.append(node[0])
+                        queue.append(node[1])
                 else:
-                    right = x[attr_idx] >= node['cutoff']
-                    queue.append(node['children'][right])
+                    queue.append(node[x[attr_idx] >= node['cutoff']])
 
         ids = np.hstack([leaf['ids'][not axis] for leaf in leafs])
         pred = np.hstack([leaf['axmeans'][not axis] for leaf in leafs])
@@ -566,11 +581,16 @@ class PBCT:
             raise TypeError('self.savepath must be set or argument path'
                             'must be given.')
 
-        model_data = dict(
-            parameters=self.parameters,
-            tree=self.tree,
-        )
+        model_data = {
+            'class': self.__class__,
+            'parameters': self.parameters,
+            'tree': self.tree,
+        }
         joblib.dump(model_data, path)
+
+    @classmethod
+    def load(cls, path):
+        return load_model(path, class_=cls)
 
     # TODO: Decide wether to normalize by total # of leaves.
     # TODO: Determine if calculating on each axis really makes sense.
@@ -599,8 +619,8 @@ class PBCT:
         for key, size in sizes.items():
             ret[key][name] = ret[key].get(name, 0) + size * node['quality']
         
-        for child in node['children']:
-            ret = self.feature_importances(child, ret=ret)
+        ret = self.feature_importances(node[0], ret=ret)
+        ret = self.feature_importances(node[1], ret=ret)
         
         if is_root_call:
             ret = pd.DataFrame(ret).sort_values('total', ascending=False)
@@ -659,9 +679,8 @@ class PBCTClassifier(PBCT):
 
         for axis, X in enumerate(XX):
             X_cols = enumerate(X.T)
-            if self.verbose:
-                X_cols = tqdm(X_cols, desc=f'ax={axis}',
-                              total=X.shape[1])
+            X_cols = tqdm(X_cols, desc=f'ax={axis}', total=X.shape[1],
+                          disable=self.verbose < 3)
 
             for attr_id, attr_col in X_cols:
                 split = self._find_best_split(attr_col,

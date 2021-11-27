@@ -83,7 +83,7 @@ def parse_args():
         '--outdir', default='PBCT_results',
         help='Where to save results.')
     arg_parser.add_argument(
-        '--k', '-k', type=float, nargs='+', default=[3],
+        '--k', '-k', type=int, nargs='+', default=[3],
         help='Number of folds for cross-validation.')
     arg_parser.add_argument(
         '--diag', action='store_true',
@@ -212,7 +212,8 @@ def main(**kwargs):
             # NOTE: models are not being saved.
             outdir.mkdir()
             k = kwargs['k']
-            if isinstance(k, list) and len(k) == 1: k = k[0]
+            if isinstance(k, list) and len(k) == 1:
+                k = k[0]
             splits, _, preds = PBCT.train_test.cross_validate_2D(
                 XX, Y, Tree, k=k, diag=kwargs['diag'], njobs=kwargs['njobs'],
             )
