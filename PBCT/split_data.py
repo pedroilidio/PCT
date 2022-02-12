@@ -89,7 +89,8 @@ def split_LT(Xrow, Xcol, Y, test_rows, test_cols):
     return ret
 
 
-def train_test_split(Xrows, Xcols, Y, test_size=None, train_size=None):
+def train_test_split(Xrows, Xcols, Y, test_size=None,
+                     train_size=None, seed=None):
     """Split data between train and test datasets.
 
     Parameters
@@ -118,15 +119,16 @@ def train_test_split(Xrows, Xcols, Y, test_size=None, train_size=None):
     nrows, ncols = Y.shape
     nrows_test, ncols_test = parse_test_train_size(test_size, train_size, Y.shape)
     # Select test indices test_rows and test_cols, respectively for each axis.
-    test_rows = np.random.choice(nrows, nrows_test, replace=False)
-    test_cols = np.random.choice(ncols, ncols_test, replace=False)
+    rng = np.random.default_rng(seed)
+    test_rows = rng.choice(nrows, nrows_test, replace=False)
+    test_cols = rng.choice(ncols, ncols_test, replace=False)
 
     return split_LT(Xrows, Xcols, Y, test_rows, test_cols)
 
 
-def kfold_split(Xrows, Xcols, Y, k=None, diag=False):
+def kfold_split(Xrows, Xcols, Y, k=None, diag=False, seed=None):
     """Split 2D data into folds for cross validation.
-    
+
     Parameters
     ----------
     Xrows, Xcols : NDArray
@@ -153,8 +155,10 @@ def kfold_split(Xrows, Xcols, Y, k=None, diag=False):
 
     nrows, ncols = Xrows.shape[0], Xcols.shape[0]
     Xrows_idx, Xcols_idx = np.arange(nrows), np.arange(ncols)
-    np.random.shuffle(Xrows_idx)
-    np.random.shuffle(Xcols_idx)
+
+    rng = np.random.default_rng(seed)
+    rng.shuffle(Xrows_idx)
+    rng.shuffle(Xcols_idx)
     Xrows_folds_idx = np.array_split(Xrows_idx, k[0])
     Xcols_folds_idx = np.array_split(Xcols_idx, k[1])
     splits = []
