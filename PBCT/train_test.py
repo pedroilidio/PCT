@@ -34,12 +34,12 @@ def cross_validate_2D(
     return dict(folds=splits, models=models, predictions=predictions)
 
 
-def save_split(split, dir_data):
+def save_split(split, dir_data, fmt_x='%f', fmt_y='%f'):
     dir_data.mkdir()
     for LT, data in split.items():
         dir_LT = dir_data/LT
         dir_LT.mkdir()
         (x1, x2), y = data
-        np.savetxt(dir_LT/'X1.csv', x1, delimiter=',')
-        np.savetxt(dir_LT/'X2.csv', x2, delimiter=',')
-        np.savetxt(dir_LT/'Y.csv', y, delimiter=',', fmt='%d')
+        np.savetxt(dir_LT/'X1.csv', x1, delimiter=',', fmt=fmt_x)
+        np.savetxt(dir_LT/'X2.csv', x2, delimiter=',', fmt=fmt_x)
+        np.savetxt(dir_LT/'Y.csv', y, delimiter=',', fmt=fmt_y)
