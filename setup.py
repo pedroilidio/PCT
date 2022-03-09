@@ -5,7 +5,7 @@ PATH_HERE = Path(__file__).parent
 README = (PATH_HERE/"README.md").read_text()
 
 setup(name='pbct',
-      version='0.3.1',
+      version='0.3.2',
       description='Predictive Bi-Clustering Trees in Python.',
       long_description=README,
       long_description_content_type="text/markdown",
@@ -17,7 +17,7 @@ setup(name='pbct',
       scripts=['bin/PBCT'],
       zip_safe=False,
       install_requires=[
-          'pandas', 'numpy', 'numba', 'tqdm',
+          'pandas', 'numpy<=1.21', 'numba', 'tqdm',
       ],
       extras_require={
           'Tree visualization': ['graphviz', 'matplotlib'],
