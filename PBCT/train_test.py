@@ -1,4 +1,4 @@
-import contextlib
+from pathlib import Path
 from copy import deepcopy
 from joblib import Parallel, delayed
 # import joblib
@@ -35,6 +35,7 @@ def cross_validate_2D(
 
 
 def save_split(split, dir_data, fmt_x='%f', fmt_y='%f'):
+    dir_data = Path(dir_data)
     dir_data.mkdir()
     for LT, data in split.items():
         dir_LT = dir_data/LT

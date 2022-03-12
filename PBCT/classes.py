@@ -597,31 +597,30 @@ class PBCT:
     @property
     def feature_importances(self, node=None, ret=None):
         """Calculate Mean Decrease in Impurity for a trained tree, in each axis."""
-        
         is_root_call = ret is None
         if is_root_call:
             node = self.tree
             ret = dict(cols={}, rows={}, total={})
         #   feature_importances.n_nodes = dict(rows=0, cols=0, total=0)
-        
+
         if node['is_leaf']:
             return ret
-        
+
         # feature_importances.n_nodes['total'] += 1
         # feature_importances.n_nodes[node.split_axis] += 1
         print(bin(node['pos'])[2:], end='\x1b[1K\r')
         shape = node['Yshape']
         name = node['coord']
-        
+
         # of rows, # of cols, total items.
         sizes = dict(rows=shape[0], cols=shape[1], total=shape[0]*shape[1])
-        
+
         for key, size in sizes.items():
             ret[key][name] = ret[key].get(name, 0) + size * node['quality']
-        
+
         ret = self.feature_importances(node[0], ret=ret)
         ret = self.feature_importances(node[1], ret=ret)
-        
+
         if is_root_call:
             ret = pd.DataFrame(ret).sort_values('total', ascending=False)
             ret /= sizes
@@ -687,7 +686,7 @@ class PBCTClassifier(PBCT):
                                               Y_ax_means[axis], Yvar)
                 if split and (split[0] > best_split[0]):
                     best_split = split + (axis, attr_id)
-        
+
         if best_split == (0,):
             return Ymean, Y_ax_means, None
         return Ymean, Y_ax_means, best_split

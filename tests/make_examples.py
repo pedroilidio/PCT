@@ -1,5 +1,19 @@
+from argparse import ArgumentParser
 from pathlib import Path
 import numpy as np
+
+DIR_HERE = Path(__file__).resolve().parent
+
+
+def parse_args(args=None):
+    argparser = ArgumentParser()
+    argparser.add_argument('--shape', nargs='+', type=int, default=[1000, 800])
+    argparser.add_argument('--nattrs', nargs='+', type=int, default=[200, 300])
+    argparser.add_argument('--nrules', type=int, default=10)
+    argparser.add_argument('--seed', type=int, default=0)
+    argparser.add_argument('-o', '--outdir', type=Path,
+                           default=Path(DIR_HERE.parent/'examples/input'))
+    return argparser.parse_args(args)
 
 
 def gen_imatrix(shape, nattrs, func=None, nrules=5, quiet=False):
@@ -49,21 +63,21 @@ def gen_interaction_func(nattrs, nrules=10, popen=.5, pclose=.2, pand=.5):
     return eval('lambda *xx: ' + strf), strf
 
 
-def main():
-    np.random.seed(42)
-    shape, nattrs, nrules = (1000, 1000), (500, 500), 10
-    out_dir = Path('../examples/input')
-    out_dir.mkdir(exist_ok=True, parents=True)
+def main(shape, nattrs, nrules, outdir, seed):
+    np.random.seed(seed)
+    outdir.mkdir(exist_ok=True, parents=True)
 
     func, strfunc = gen_interaction_func(nattrs, nrules)
     print('Generated interaction function:\n\t', strfunc)
+    with (outdir/'interaction_function.txt').open('w') as f:
+        f.write(strfunc)
     XX, Y = gen_imatrix(shape, nattrs, func=func)
     X1, X2 = XX
 
-    print(f'Saving to {out_dir.resolve()}...')
-    np.savetxt(out_dir/'X1.csv', X1, delimiter=',')
-    np.savetxt(out_dir/'X2.csv', X2, delimiter=',')
-    np.savetxt(out_dir/'Y.csv', Y, delimiter=',', fmt='%d')
+    print(f'Saving to {outdir.resolve()}...')
+    np.savetxt(outdir/'X1.csv', X1, delimiter=',')
+    np.savetxt(outdir/'X2.csv', X2, delimiter=',')
+    np.savetxt(outdir/'Y.csv', Y, delimiter=',', fmt='%d')
 
     print('Generating labels...')
     X1_instance_labels = 'X1_instance_' + np.arange(shape[0]).astype(str).astype(object)
@@ -72,13 +86,14 @@ def main():
     X2_column_labels = 'X2_attr_' + np.arange(nattrs[1]).astype(str).astype(object)
 
     print('Saving...')
-    np.savetxt(out_dir/'X1_names.txt', X1_instance_labels, fmt='%s')
-    np.savetxt(out_dir/'X2_names.txt', X2_instance_labels, fmt='%s')
-    np.savetxt(out_dir/'X1_col_names.txt', X1_column_labels, fmt='%s')
-    np.savetxt(out_dir/'X2_col_names.txt', X2_column_labels, fmt='%s')
-    
+    np.savetxt(outdir/'X1_names.txt', X1_instance_labels, fmt='%s')
+    np.savetxt(outdir/'X2_names.txt', X2_instance_labels, fmt='%s')
+    np.savetxt(outdir/'X1_col_names.txt', X1_column_labels, fmt='%s')
+    np.savetxt(outdir/'X2_col_names.txt', X2_column_labels, fmt='%s')
+
     print('Done.')
 
 
 if __name__ == '__main__':
-    main()
+    args = parse_args()
+    main(**vars(args))

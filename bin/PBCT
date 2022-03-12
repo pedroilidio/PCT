@@ -157,7 +157,7 @@ def main(**kwargs):
 
     if kwargs['action'] == 'predict':
         print('Loading model...')
-        Tree = PBCT.load_model(kwargs['path_model'])
+        Tree = PBCT.load(kwargs['path_model'])
         print('Predicting values...')
         predictions = Tree.predict(
             XX,
@@ -195,15 +195,18 @@ def main(**kwargs):
             if isinstance(train_size, list) and len(train_size) == 1:
                 test_size = train_size[0]
 
+            print('Splitting dataset and training PBCT...')
             split, pred = PBCT.train_test.split_fit_test(
                 XX, Y, Tree, test_size=test_size,
                 train_size=train_size,
             )
+            print('Saving model...')
             Tree.save(outdir/'model.dict.pickle.gz')
 
+            print('Saving data...')
             PBCT.train_test.save_split(split, outdir/'data')
 
-            dir_pred = outdir/'pred'
+            dir_pred = outdir/'predictions'
             dir_pred.mkdir()
             for LT, data in pred.items():
                 np.savetxt(dir_pred/(LT + '.csv'), data, delimiter=',')
@@ -214,17 +217,19 @@ def main(**kwargs):
             k = kwargs['k']
             if isinstance(k, list) and len(k) == 1:
                 k = k[0]
-            splits, _, preds = PBCT.train_test.cross_validate_2D(
+            print(f'Splitting in {k} folds and training PBCT...')
+            xval_result = PBCT.train_test.cross_validate_2D(
                 XX, Y, Tree, k=k, diag=kwargs['diag'], njobs=kwargs['njobs'],
             )
-            dir_folds = outdir/'folds'
-            dir_preds = outdir/'preds'
+            dir_folds = outdir/'data'
+            dir_preds = outdir/'predictions'
             dir_folds.mkdir()
             dir_preds.mkdir()
 
-            for i, split in enumerate(splits):
+            print('Saving data...')
+            for i, split in enumerate(xval_result['folds']):
                 PBCT.train_test.save_split(split, dir_folds/f'fold{i+1}')
-            for i, pred in enumerate(preds):
+            for i, pred in enumerate(xval_result['predictions']):
                 dir_pred = dir_preds/f'fold{i+1}'
                 dir_pred.mkdir()
                 for LT, data in pred.items():
